@@ -299,7 +299,10 @@ public class ConnectFourGameController : MonoBehaviour {
 		int selectedColumn = Mathf.RoundToInt (pieceCurrentPosition.x);
 		int selectedRow = findEmptyRowForColumn (selectedColumn);
 		if (selectedRow == -1) {
-			// Not Valid Move
+			this.isPieceDropping = false;
+			this.isMouseButtonPressed = false;
+
+			yield break;
 		} else {
 			GameObject newPiece = Instantiate (piece) as GameObject;
 			piece.GetComponent<Renderer> ().enabled = false;

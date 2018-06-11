@@ -10,6 +10,10 @@ namespace Utils {
 			Scene scene = SceneManager.GetActiveScene(); 
 			SceneManager.LoadScene(scene.name);
 		}
+
+		public static void loadSceneBySceneName(string sceneName) {
+			SceneManager.LoadScene (sceneName);
+		}
 	}
 }
 

@@ -12,107 +12,70 @@ public class ConnectFourGameController : MonoBehaviour {
 	private GameObject gameEndText;
 	private GameObject restartButton;
 
-	private Dictionary<GameComponents, GameObject> mapOfPieces;
-	private GameComponents[] playerPieceInfo;
-	private MatrixStatus[] matrixInfoByPlayer;
-	private WinningStatus[] winningInfoByPlayer;
+	private Dictionary<UIConstants.Components, GameObject> mapOfPieces;
 
-	private int rowSize;
-	private int colSize;
-	private int player;
-	private WinningStatus winner;
-	private MatrixStatus[,] boardMatrix;
-
-	private bool isGameOver;
+	private ConnectFourGameLogic gameLogic;
+	private GameState gameState;
+	private CameraUtils cameraUtils;
 	private bool isMouseButtonPressed;
 	private bool isPieceDropping;
-	private bool isCheckingForWinner;
-
-	enum GameComponents {
-		board,
-		hole,
-		bluePiece,
-		redPiece,
-		GameEndText,
-		RestartButton
-	}
-
-	enum MatrixStatus {
-		empty,
-		bluePiece,
-		redPiece
-	}
-
-	enum WinningStatus {
-		gameRunning,
-		bluePiece,
-		redPiece,
-		draw
-	}
 
 	void Awake() {
-		this.colSize = 7;
-		this.rowSize = 6;
-		this.isGameOver = false;
-		this.player = 0;
-		this.playerPieceInfo = new GameComponents[] {GameComponents.bluePiece, GameComponents.redPiece};
 
 		// Map game Objects with enum constants.
-		this.mapOfPieces = new Dictionary<GameComponents, GameObject> ();
-		this.mapOfPieces.Add (GameComponents.bluePiece,
-			Resources.Load (GameComponents.bluePiece.ToString ()) as GameObject);
-		this.mapOfPieces.Add (GameComponents.redPiece,
-			Resources.Load (GameComponents.redPiece.ToString ()) as GameObject);
+		mapOfPieces = new Dictionary<UIConstants.Components, GameObject> ();
+		mapOfPieces.Add (UIConstants.Components.bluePiece,
+			Resources.Load (UIConstants.Components.bluePiece.ToString ()) as GameObject);
+		mapOfPieces.Add (UIConstants.Components.redPiece,
+			Resources.Load (UIConstants.Components.redPiece.ToString ()) as GameObject);
 
-		// Intialize board Matrix
-		this.boardMatrix = new MatrixStatus[rowSize, colSize];
+		// Intialize gameState
+		gameState = new GameState();
+		gameState.intializeBoard (6, 7); // Row, Col Size of Board.
 
-		this.matrixInfoByPlayer = new MatrixStatus[]{ MatrixStatus.bluePiece, MatrixStatus.redPiece };
-		this.winningInfoByPlayer = new WinningStatus[]{ WinningStatus.bluePiece, WinningStatus.redPiece };
+		gameLogic = new ConnectFourGameLogic (gameState);
+		cameraUtils = new CameraUtils (gameState);
 
-		this.isMouseButtonPressed = false;
-		this.isPieceDropping = false;
+		isMouseButtonPressed = false;
+		isPieceDropping = false;
 
-		this.winner = WinningStatus.gameRunning;
+		gameEndText = GameObject.Find (UIConstants.Components.GameEndText.ToString ());
+		gameEndText.SetActive (false);
 
-		this.gameEndText = GameObject.Find (GameComponents.GameEndText.ToString ());
-		this.gameEndText.SetActive (false);
-
-		this.restartButton = GameObject.Find (GameComponents.RestartButton.ToString ());
-		this.restartButton.SetActive (false);
-		this.restartButton.GetComponent<Button>().onClick.AddListener(() => {Utils.SceneUtils.restartGame();});
+		restartButton = GameObject.Find (UIConstants.Components.RestartButton.ToString ());
+		restartButton.SetActive (false);
+		restartButton.GetComponent<Button>().onClick.AddListener(() => {Utils.SceneUtils.restartGame();});
 	}
 
 	// Use this for initialization
 	void Start () {
 		createBoard ();
-		setCameraWithBoardSize ();
+		cameraUtils.setCamera (Camera.main);
 		setGameStatusText();
 		setRestartButton ();
 	}
 
 	void setGameStatusText() {
-		this.gameEndText.transform.position = new Vector3 (
-			(this.colSize - 1) / 2.0f, ((this.rowSize - 1) / 2.0f),
+		gameEndText.transform.position = new Vector3 (
+			(gameState.getColSize() - 1) / 2.0f, ((gameState.getRowSize() - 1) / 2.0f),
 			1
 		);
 	}
 
 	void setRestartButton() {
-		this.restartButton.transform.position = new Vector3 (this.rowSize, -1, 1);
+		restartButton.transform.position = new Vector3 (gameState.getRowSize(), -1, 1);
 	}
 
 	void createBoard() {
-		this.board = Resources.Load (GameComponents.board.ToString ()) as GameObject;
-		this.board = Instantiate (this.board, new Vector3 (0, 0, 10), Quaternion.identity) as GameObject;
+		board = Instantiate (Resources.Load (UIConstants.Components.board.ToString ()) as GameObject,
+			new Vector3 (0, 0, 10), Quaternion.identity) as GameObject;
 
-		GameObject hole = Resources.Load (GameComponents.hole.ToString ()) as GameObject;
-		for (int x = 0; x < this.colSize; ++x) {
-			for (int y = 0; y < this.rowSize; ++y) {
+		GameObject hole = Resources.Load (UIConstants.Components.hole.ToString ()) as GameObject;
+		for (int x = 0; x < gameState.getColSize(); ++x) {
+			for (int y = 0; y < gameState.getRowSize(); ++y) {
 				GameObject currentHole = Instantiate (hole, mapMatrixCellToGameField(new Vector2(x, y)),
 					Quaternion.identity) as GameObject;
-				currentHole.transform.parent = this.board.transform;
-				this.boardMatrix [y, x] = MatrixStatus.empty;
+				currentHole.transform.parent = board.transform;
 			}
 		}
 	}
@@ -121,186 +84,22 @@ public class ConnectFourGameController : MonoBehaviour {
 		return new Vector3 (matrixCell.x, matrixCell.y, 1);
 	}
 
-	public int getBoardWidth() {
-		return this.colSize;
-	}
-
-	void setCameraWithBoardSize() {
-		Camera.main.transform.position = new Vector3(
-			(this.colSize - 1) / 2.0f, ((this.rowSize - 1) / 2.0f),
-			Camera.main.transform.position.z
-		);
-	}
-
-	GameComponents getPieceEnumByPlayer(int player) {
-		return this.playerPieceInfo [player];
-	}
-
 	GameObject spawnDummyPieceByPlayer(int player) {
-		return Instantiate (mapOfPieces [this.playerPieceInfo [player]],
-			new Vector3 (0,  rowSize, 1), Quaternion.identity) as GameObject;
+		return Instantiate (mapOfPieces [gameState.getCurrentPlayerPieceInfo()],
+			new Vector3 (0,  gameState.getRowSize(), 1), Quaternion.identity) as GameObject;
 	}
 
 	Vector3 getWorldPositionByMouse() {
 		return Camera.main.ScreenToWorldPoint (Input.mousePosition);
 	}
 
-	int findEmptyRowForColumn(int column) {
-		for (int currentRow = 0; currentRow < this.rowSize; ++currentRow) {
-			if (this.boardMatrix [currentRow, column].CompareTo(MatrixStatus.empty) == 0) {
-				return currentRow;
-			}
-		}
-		return -1;
-	}
-
-	bool boundCheck(int row, int col) {
-		if(row >= rowSize || row < 0 || col >= colSize || col < 0) {
-			return false;
-		}
-		return true;
-	}
-
-	bool checkForHorizontalMatching(int row, int col, int currentPositionOfPiece) {
-		MatrixStatus pieceStatus = this.boardMatrix[row, col];
-		// First half
-		for (int currentCol = col - currentPositionOfPiece; currentCol < col; ++currentCol) {
-			if (!boundCheck(row, currentCol) || this.boardMatrix [row, currentCol].CompareTo (pieceStatus) != 0) {
-				return false;
-			}
-		}
-
-		// Second half
-		for (int currentCol = col + (3 - currentPositionOfPiece); currentCol > col; --currentCol) {
-			if (!boundCheck(row, currentCol) || this.boardMatrix [row, currentCol].CompareTo (pieceStatus) != 0) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	bool checkForVerticalMatching(int row, int col, int currentPositionOfPiece) {
-		MatrixStatus pieceStatus = this.boardMatrix[row, col];
-		// First half
-		for (int currentRow = row - currentPositionOfPiece; currentRow < row; ++currentRow) {
-			if (!boundCheck (currentRow, col) || this.boardMatrix [currentRow, col].CompareTo (pieceStatus) != 0) {
-				return false;
-			}
-		}
-
-		// Second half
-		for (int currentRow = row + (3 - currentPositionOfPiece); currentRow > row; --currentRow) {
-			if (!boundCheck (currentRow, col) || this.boardMatrix [currentRow, col].CompareTo (pieceStatus) != 0) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	bool checkForLeftToRightDiagonalMatching(int row, int col, int currentPositionOfPiece) {
-		MatrixStatus pieceStatus = this.boardMatrix[row, col];
-
-		//First half
-		for (int currentRow = row - currentPositionOfPiece, currentCol = col - currentPositionOfPiece;
-			currentRow < row && currentCol < col; ++currentRow, ++currentCol) {
-			if (!boundCheck (currentRow, currentCol) || this.boardMatrix [currentRow, currentCol].CompareTo (pieceStatus) != 0) {
-				return false;
-			}
-		}
-
-		// Second half
-		for (int currentRow = row + (3 - currentPositionOfPiece), currentCol = col + (3 - currentPositionOfPiece);
-			currentRow > row && currentCol > col; --currentRow, --currentCol) {
-			if (!boundCheck (currentRow, currentCol) || this.boardMatrix [currentRow, currentCol].CompareTo (pieceStatus) != 0) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	bool checkForRightToLeftDiagonalMatching(int row, int col, int currentPositionOfPiece) {
-		MatrixStatus pieceStatus = this.boardMatrix[row, col];
-
-		//First half
-		for (int currentRow = row - currentPositionOfPiece, currentCol = col + currentPositionOfPiece;
-			currentRow < row && currentCol > col; ++currentRow, --currentCol) {
-			if (!boundCheck (currentRow, currentCol) || this.boardMatrix [currentRow, currentCol].CompareTo (pieceStatus) != 0) {
-				return false;
-			}
-		}
-
-		// Second half
-		for (int currentRow = row + (3 - currentPositionOfPiece), currentCol = col - (3 - currentPositionOfPiece);
-			currentRow > row && currentCol < col; --currentRow, ++currentCol) {
-			if (!boundCheck (currentRow, currentCol) || this.boardMatrix [currentRow, currentCol].CompareTo (pieceStatus) != 0) {
-				return false;
-			}
-		}
-
-		return true;
-	}
-
-	bool checkForDiagonalMatching(int row, int col, int currentPositionOfPiece) {
-		return checkForLeftToRightDiagonalMatching (row, col, currentPositionOfPiece)
-		|| checkForRightToLeftDiagonalMatching (row, col, currentPositionOfPiece);
-	}
-
-	bool isWinningPosition(int row, int col) {
-		// Right now our game logic implies that if 4 same pieces connected then it will be
-		// win for that color player. Here 'currentPositionOfPiece' is holding information
-		// that this piece will be on which position if there are 4 same pieces connected.
-		bool winning = false;
-		for (int currentPositonOfPiece = 0; currentPositonOfPiece < 4; ++currentPositonOfPiece) {
-			winning |= checkForHorizontalMatching (row, col, currentPositonOfPiece) 
-				|| checkForVerticalMatching (row, col, currentPositonOfPiece)
-				|| checkForDiagonalMatching (row, col, currentPositonOfPiece);
-		}
-
-		return winning;
-	}
-
-	void checkForWinner() {
-		bool anyWinning = false;
-		for (int row = 0; row < this.rowSize; ++row) {
-			for (int col = 0; col < this.colSize; ++col) {
-				if (this.boardMatrix [row, col].CompareTo (MatrixStatus.empty) != 0) {
-					bool win =  isWinningPosition (row, col);
-					if (win) {
-						this.winner = this.winningInfoByPlayer[this.player];
-						this.isGameOver = true;
-						Debug.Log ("Game Over winner is : " + winner);
-					}
-
-					anyWinning |= win;
-				}
-			}
-		}
-
-		this.isCheckingForWinner = false;
-	}
-
-	bool isDraw() {
-		for (int row = 0; row < rowSize; ++row) {
-			for (int col = 0; col < colSize; ++col) {
-				if (this.boardMatrix [row, col].CompareTo (MatrixStatus.empty) == 0) {
-					return false;
-				}
-			}
-		}
-
-		return true;
-	}
-
 	IEnumerator dropPiece(GameObject piece) {
 		Vector3 pieceCurrentPosition = piece.transform.position;
 		int selectedColumn = Mathf.RoundToInt (pieceCurrentPosition.x);
-		int selectedRow = findEmptyRowForColumn (selectedColumn);
+		int selectedRow = gameLogic.findEmptyRowForColumn (selectedColumn);
 		if (selectedRow == -1) {
-			this.isPieceDropping = false;
-			this.isMouseButtonPressed = false;
+			isPieceDropping = false;
+			isMouseButtonPressed = false;
 
 			yield break;
 		} else {
@@ -318,59 +117,54 @@ public class ConnectFourGameController : MonoBehaviour {
 				newPiece.transform.position = Vector3.Lerp(sourcePosition, targetPosition,
 					Mathf.SmoothStep(0f, 1f, timeSpent)
 				);
+
 				yield return null;
 			}
 
-			this.boardMatrix [selectedRow, selectedColumn] = this.matrixInfoByPlayer [this.player];
-		
+			gameState.updateCellForCurrentPlayerAt (selectedRow, selectedColumn);
 			DestroyImmediate (piece);
-
-			this.isCheckingForWinner = true;
-			checkForWinner ();
-
-			if (this.winner.CompareTo(WinningStatus.gameRunning) == 0 && isDraw()) {
-				this.winner = WinningStatus.draw;
-			}
+			gameLogic.updateGameStateAfterMove ();
 		}
 
-		this.isPieceDropping = false;
-		this.isMouseButtonPressed = false;
-		this.player = 1 - this.player;
+		isPieceDropping = false;
+		isMouseButtonPressed = false;
 
 		yield return 0;
 	}
 
 	string getGameEndText() {
-		switch (this.winner) {
-		case WinningStatus.draw :
+		switch (gameState.getGameStatus()) {
+		case BoardConstants.GameStatus.draw :
 			return "Game Draw!!";
-		case WinningStatus.bluePiece :
+		case BoardConstants.GameStatus.bluePiece :
 			return "Player 1 Won!";
-		case WinningStatus.redPiece :
+		case BoardConstants.GameStatus.redPiece :
 			return "Player 2 Won!";
 		}
+
 		return "Error!!";
 	}
 
 	// Update is called once per frame
 	void Update () {
-		if (!this.isGameOver) {
-			if (this.dummyPiece == null) {
-				this.dummyPiece = spawnDummyPieceByPlayer (player);
+		if (!gameState.isGameOver()) {
+			if (dummyPiece == null) {
+				dummyPiece = spawnDummyPieceByPlayer (gameState.getCurrentPlayer());
 			} else {
-				Vector3 mouseCurrentPosition = getWorldPositionByMouse ();
-				this.dummyPiece.transform.position = new Vector3 (
-					Mathf.Clamp (mouseCurrentPosition.x, 0, this.colSize - 1), this.rowSize, 1);
-				if (Input.GetMouseButtonDown (0) && !this.isMouseButtonPressed && !this.isPieceDropping) {
-					this.isPieceDropping = true;
-					StartCoroutine (dropPiece (this.dummyPiece));
+				gameLogic.updatePiecePositionByMousePosition (
+					dummyPiece,
+					getWorldPositionByMouse ()
+				);
+				if (Input.GetMouseButtonDown (0) && !isMouseButtonPressed && !isPieceDropping) {
+					isPieceDropping = true;
+					StartCoroutine (dropPiece (dummyPiece));
 				}
 			}
 		} else {
-			this.gameEndText.GetComponent<Text> ().text = getGameEndText ();
-			this.gameEndText.SetActive (true);
+			gameEndText.GetComponent<Text> ().text = getGameEndText ();
+			gameEndText.SetActive (true);
 
-			this.restartButton.SetActive (true);
+			restartButton.SetActive (true);
 		}
 	}
 }
